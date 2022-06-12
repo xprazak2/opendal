@@ -25,3 +25,4 @@ pub mod fs;
 pub mod hdfs;
 pub mod memory;
 pub mod s3;
+pub mod ipfs;
