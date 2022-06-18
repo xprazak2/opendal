@@ -2,12 +2,9 @@ use super::builder::Builder;
 
 use crate::{Accessor, AccessorMetadata, BytesReader, BytesWriter, ObjectMetadata, DirStreamer};
 use crate::ops::{OpCreate, OpRead, OpWrite, OpStat, OpDelete, OpList};
-
-use anyhow::{Context, Error};
+use crate::io_util;
 
 use async_trait::async_trait;
-use bytes::{Bytes, BufMut};
-use futures::StreamExt;
 use futures::TryStreamExt;
 use ipfs_api_backend_hyper::{IpfsClient, IpfsApi};
 use ipfs_api;
@@ -16,21 +13,25 @@ use std::io;
 
 /// Backend for IPFS service
 #[derive(Debug, Clone)]
-pub struct Backend {}
+pub struct Backend {
+  root: String
+}
 
 impl Backend {
+    pub fn new(root: String) -> Self {
+      Self { root }
+    }
+
     pub fn build() -> Builder {
       Builder::default()
     }
 
     pub(crate) fn get_abs_path(&self, path: &str) -> String {
-      if path == "/" {
+      if path == self.root {
         return path.to_string()
       }
 
-      let root = "/";
-
-      format!("{}{}", root, path.trim_start_matches(root))
+      format!("{}{}", self.root, path.trim_start_matches(&self.root))
     }
 
     pub(crate) async fn files_read(&self, path: &str, offset: Option<i64>, count: Option<i64>) -> io::Result<BytesReader> {
@@ -42,6 +43,21 @@ impl Backend {
         .into_async_read();
       Ok(Box::new(reader))
     }
+
+    pub(crate) async fn files_delete(&self, path: &str) -> io::Result<()> {
+      let client = IpfsClient::default();
+      client.files_rm(path, false).await.map_err(|err| crate::error::other(err))
+    }
+
+    // pub(crate) async fn files_write(&self, path: &str) -> io::Result<BytesWriter> {
+    // pub(crate) async fn files_write(&self, path: &str) -> () {
+    //   let client = IpfsClient::default();
+    //   let files_write = ipfs_api::request::FilesWrite::builder().path(path).build();
+
+    //   let (tx, body) = io_util::new_http_channel();
+
+    //   let req = client.files_write_with_options(files_write, body);
+    // }
 }
 
 #[async_trait]
@@ -60,8 +76,8 @@ impl Accessor for Backend {
 
     let offset = args.offset().map(|val| i64::try_from(val).ok()).flatten();
     let size = args.size().map(|val| i64::try_from(val).ok()).flatten();
-    let res = self.files_read(&path, offset, size).await?;
-    Ok(res)
+    let reader = self.files_read(&path, offset, size).await?;
+    Ok(reader)
   }
 
   async fn write(&self, args: &OpWrite) -> io::Result<BytesWriter> {
@@ -75,20 +91,12 @@ impl Accessor for Backend {
   }
 
   async fn delete(&self, args: &OpDelete) -> io::Result<()> {
-    let _ = args;
-    unimplemented!()
+    let path = self.get_abs_path(args.path());
+    self.files_delete(&path).await
   }
 
   async fn list(&self, args: &OpList) -> io::Result<DirStreamer> {
     let _ = args;
-
-    // let path = self.get_abs_path(args.path());
-    // debug!("object {} list start", &path);
-
-    // let dir_stream = DirStream::new(Arc::new(self.clone()));
-
-    // Ok(Box::new(dir_stream))
     unimplemented!()
-
   }
 }
