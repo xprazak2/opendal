@@ -34,6 +34,11 @@ impl Backend {
       format!("{}{}", self.root, path.trim_start_matches(&self.root))
     }
 
+    pub(crate) async fn files_create(&self, path: &str) -> io::Result<()> {
+      let client = IpfsClient::default();
+      client.files_write(path, true, true, io::empty()).await.map_err(|err| crate::error::other(err))
+    }
+
     pub(crate) async fn files_read(&self, path: &str, offset: Option<i64>, count: Option<i64>) -> io::Result<BytesReader> {
       let client = IpfsClient::default();
       let req = ipfs_api::request::FilesRead { path, offset, count };
@@ -67,8 +72,8 @@ impl Accessor for Backend {
   }
 
   async fn create(&self, args: &OpCreate) -> io::Result<()> {
-    let _ = args;
-    unimplemented!()
+    let path = self.get_abs_path(args.path());
+    self.files_create(&path).await
   }
 
   async fn read(&self, args: &OpRead) -> io::Result<BytesReader> {
