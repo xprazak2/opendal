@@ -1,15 +1,15 @@
 use super::builder::Builder;
 
-use crate::{Accessor, AccessorMetadata, BytesReader, BytesWriter, ObjectMetadata, DirStreamer};
+use crate::{Accessor, AccessorMetadata, BytesReader, BytesWriter, ObjectMetadata, ObjectMode, DirStreamer};
 use crate::ops::{OpCreate, OpRead, OpWrite, OpStat, OpDelete, OpList};
 use crate::io_util;
 
 use async_trait::async_trait;
 use futures::TryStreamExt;
+use ipfs_api::response::FilesStatResponse;
 use ipfs_api_backend_hyper::{IpfsClient, IpfsApi};
 use ipfs_api;
 use std::io;
-
 
 /// Backend for IPFS service
 #[derive(Debug, Clone)]
@@ -34,9 +34,26 @@ impl Backend {
       format!("{}{}", self.root, path.trim_start_matches(&self.root))
     }
 
+    pub(crate) async fn files_stat(&self, path: &str) -> io::Result<ObjectMetadata> {
+      let client = IpfsClient::default();
+      let mut meta = ObjectMetadata::default();
+
+      let res = client.files_stat(path).await.map_err(|err| crate::error::other(err))?;
+
+      let mode: ObjectMode  = match res.typ.as_str() {
+        "file" => ObjectMode::FILE,
+        "directory" => ObjectMode::DIR,
+        _ => ObjectMode::Unknown,
+      };
+
+      meta.set_mode(mode).set_content_length(res.size);
+
+      Ok(meta)
+    }
+
     pub(crate) async fn files_create(&self, path: &str) -> io::Result<()> {
       let client = IpfsClient::default();
-      client.files_write(path, true, true, io::empty()).await.map_err(|err| crate::error::other(err))
+      client.files_write(path, true, false, io::empty()).await.map_err(|err| crate::error::other(err))
     }
 
     pub(crate) async fn files_read(&self, path: &str, offset: Option<i64>, count: Option<i64>) -> io::Result<BytesReader> {
@@ -91,8 +108,8 @@ impl Accessor for Backend {
   }
 
   async fn stat(&self, args: &OpStat) -> io::Result<ObjectMetadata> {
-    let _ = args;
-    unimplemented!()
+    let path = self.get_abs_path(args.path());
+    self.files_stat(&path).await
   }
 
   async fn delete(&self, args: &OpDelete) -> io::Result<()> {
