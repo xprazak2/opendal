@@ -3,6 +3,7 @@ use std::env;
 
 use anyhow::Result;
 
+use futures::StreamExt;
 use opendal::{services::ipfs, Accessor, Operator};
 
 #[tokio::main]
@@ -22,9 +23,10 @@ Available Environment Values:
 );
 
   let mut builder = ipfs::Backend::build();
-  // NOTE: the root must be absolute path in MFS.
+  // root must be absolute path in MFS.
   builder.root(&env::var("OPENDAL_IPFS_ROOT").unwrap_or_else(|_| "/".to_string()));
 
+  // Will use endpoint specified in ~/.ipfs/api, falls back to `localhost:5001`
   let accessor: Arc<dyn Accessor> = builder.finish().await?;
 
   let op: Operator = Operator::new(accessor);
@@ -35,8 +37,14 @@ Available Environment Values:
 
   println!("File content: {}", String::from_utf8_lossy(&content));
 
-  let dpath = "/mfs/QmckbcLXxdgSHJVY2dHc2tN6Sz53zNe9C5YDbDdvSoNkVS/text.txt";
-  op.object(dpath).delete().await?;
+  let dd = "/mfs/QmckbcLXxdgSHJVY2dHc2tN6Sz53zNe9C5YDbDdvSoNkVS/";
+
+  let mut list = op.object(&dd).list().await?;
+
+  while let Some(res) = list.next().await {
+    let item = res?;
+    println!("{}", item.path())
+  }
 
   Ok(())
 }

@@ -13,7 +13,7 @@ use crate::error::BackendError;
 
 #[derive(Default, Debug)]
 pub struct Builder {
-  root: Option<String>
+  root: Option<String>,
 }
 
 impl Builder {
