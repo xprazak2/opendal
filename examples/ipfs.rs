@@ -4,6 +4,7 @@ use std::env;
 use anyhow::Result;
 
 use futures::StreamExt;
+use log::info;
 use opendal::{services::ipfs, Accessor, Operator};
 
 #[tokio::main]
@@ -31,20 +32,26 @@ Available Environment Values:
 
   let op: Operator = Operator::new(accessor);
 
-  let path = "/mfs/QmckbcLXxdgSHJVY2dHc2tN6Sz53zNe9C5YDbDdvSoNkVS/file.txt";
+  // let path = "/mfs/QmckbcLXxdgSHJVY2dHc2tN6Sz53zNe9C5YDbDdvSoNkVS/file.txt";
 
-  let content = op.object(&path).read().await?;
+  // let content = op.object(&path).read().await?;
 
-  println!("File content: {}", String::from_utf8_lossy(&content));
+  // println!("File content: {}", String::from_utf8_lossy(&content));
 
-  let dd = "/mfs/QmckbcLXxdgSHJVY2dHc2tN6Sz53zNe9C5YDbDdvSoNkVS/";
+  // let dd = "/mfs/QmckbcLXxdgSHJVY2dHc2tN6Sz53zNe9C5YDbDdvSoNkVS/";
 
-  let mut list = op.object(&dd).list().await?;
+  // let mut list = op.object(&dd).list().await?;
 
-  while let Some(res) = list.next().await {
-    let item = res?;
-    println!("{}", item.path())
-  }
+  // while let Some(res) = list.next().await {
+  //   let item = res?;
+  //   println!("{}", item.path())
+  // }
+
+  let dd = "/mfs/QmckbcLXxdgSHJVY2dHc2tN6Sz53zNe9C5YDbDdvSoNkVS/ble";
+
+  info!("try to write file: {}", &dd);
+  op.object(&dd).write("Hello, world!").await?;
+  info!("write file successful!");
 
   Ok(())
 }
