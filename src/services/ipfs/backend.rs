@@ -87,6 +87,10 @@ impl Backend {
     pub(crate) async fn files_list(&self, path: &str) -> io::Result<FilesLsResponse> {
       self.client.files_ls(Some(path)).await.map_err(|err| crate::error::other(err))
     }
+
+    pub(crate) async fn files_write(&self, path: &str, data: Bytes) -> io::Result<()> {
+      self.client.files_write(path, true, true, data.reader()).await.map_err(|err| crate::error::other(err))
+    }
 }
 
 #[async_trait]
@@ -114,7 +118,7 @@ impl Accessor for Backend {
 
     let (tx, rx) = mpsc::channel::<Bytes>(0);
 
-    let req_fut = IpfsReqFuture::new(rx, self.client.clone(), path);
+    let req_fut = IpfsReqFuture::new(rx, Arc::new(self.clone()), path);
 
     let req_writer = RequestWriter::new(args, tx, req_fut, "handle it".to_string());
 

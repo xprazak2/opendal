@@ -13,27 +13,38 @@ use std::io;
 use std::pin::Pin;
 use std::task::Context;
 use std::task::Poll;
+use std::sync::Arc;
 
 use futures::channel::mpsc::Sender;
 use futures::AsyncWrite;
 use futures::ready;
 use futures::Future;
+use futures::future::BoxFuture;
 
 use crate::ops::OpWrite;
 use crate::error::other;
 
 use futures_lite::future::FutureExt;
+
+use super::Backend;
+
+enum State {
+  Init,
+  Writing(Pin<Box<Bytes>>),
+  Sending(BoxFuture<'static, io::Result<()>>),
+}
+
+#[pin_project]
 pub struct IpfsReqFuture {
   rx: Receiver<Bytes>,
-  client: IpfsClient,
+  backend: Arc<Backend>,
   path: String,
-  content: Option<Bytes>,
-  req_fut: Option<Pin<Box<dyn Future<Output = Result<(), ipfs_api::Error>> + Send>>>,
+  state: State,
 }
 
 impl IpfsReqFuture {
-  pub fn new(rx: Receiver<Bytes>, client: IpfsClient, path: String) -> Self {
-    Self { rx, client, path, content: None, req_fut: None }
+  pub fn new(rx: Receiver<Bytes>, backend: Arc<Backend>, path: String) -> Self {
+    Self { rx, backend, path, state: State::Init }
   }
 
   fn poll_content(&mut self) -> io::Result<Option<Bytes>> {
@@ -43,26 +54,10 @@ impl IpfsReqFuture {
         Ok(Some(payload))
       },
       Ok(None) => {
-        println!("Nothing");
-        Ok(None)
+        unreachable!("channel should not be closed.")
       },
       Err(err) => {
         unreachable!("channel should contain a message when polled: {:?}", err)
-      },
-    }
-  }
-
-  fn poll_write(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<<IpfsReqFuture as Future>::Output> {
-    let ct = self.content.clone().unwrap().reader();
-    println!("Fire away!");
-    let res = self.client.files_write(&self.path, true, true, ct).poll(cx);
-    println!("Polling...");
-    match res {
-      Poll::Ready(Ok(data)) => Poll::Ready(Ok(data)),
-      Poll::Ready(Err(e)) => Poll::Ready(Err(other(e))),
-      Poll::Pending => {
-        println!("Pending..");
-        Poll::Pending
       },
     }
   }
@@ -72,38 +67,38 @@ impl Future for IpfsReqFuture {
   type Output = std::result::Result<(), io::Error>;
 
   fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-    let pr = match &self.content {
-      Some(_) => {
-        self.poll_write(cx)
-      },
-      None => {
+    let backend = self.backend.clone();
+    let path = self.path.clone();
+
+    let pr = match &mut self.state {
+      State::Init => {
         if let Some(bytes) = self.poll_content()? {
-          self.content = Some(bytes.clone());
-          println!("Content: {:?}", String::from_utf8_lossy(&self.content.as_ref().unwrap()));
-          // store future in self for future poll in the next iteration....
-          self.req_fut = Some(self.client.files_write(&self.path, true, true, bytes.reader()));
-          let res = self.req_fut.and_then(|ft| Some(ft.poll(cx)));
-          println!("Res: {:?}", res);
-          if let Some(result) = res {
-            match result {
-              Poll::Ready(Ok(data)) => Poll::Ready(Ok(data)),
-              Poll::Ready(Err(e)) => Poll::Ready(Err(other(e))),
-              Poll::Pending => Poll::Pending,
-            }
-          } else {
-            unreachable!("Request future is always created");
-          }
+          self.state = State::Writing(Box::pin(bytes.clone()));
+
+          let fut = async move {
+            let resp = backend.files_write(&path, bytes).await?;
+            Ok(resp)
+          };
+
+          self.state = State::Sending(Box::pin(fut));
+
+          self.poll(cx)
         } else {
           Poll::Pending
         }
-      }
+      },
+      State::Writing(bytes) => {
+        Poll::Pending
+      },
+      State::Sending(fut) => {
+        let resp = ready!(Pin::new(fut).poll(cx))?;
+        Poll::Ready(Ok(resp))
+      },
     };
     println!("Poll returned: {:?}", pr);
     pr
   }
 }
-
-type WriteFut = Pin<Box<dyn futures::Future<Output = Result<(), ipfs_api::Error>> + std::marker::Send>>;
 
 #[pin_project]
 pub(crate) struct RequestWriter {
