@@ -23,17 +23,17 @@ use crate::ops::OpWrite;
 use crate::error::other;
 
 use futures_lite::future::FutureExt;
-
 pub struct IpfsReqFuture {
   rx: Receiver<Bytes>,
   client: IpfsClient,
   path: String,
   content: Option<Bytes>,
+  req_fut: Option<Pin<Box<dyn Future<Output = Result<(), ipfs_api::Error>> + Send>>>,
 }
 
 impl IpfsReqFuture {
   pub fn new(rx: Receiver<Bytes>, client: IpfsClient, path: String) -> Self {
-    Self { rx, client, path, content: None }
+    Self { rx, client, path, content: None, req_fut: None }
   }
 
   fn poll_content(&mut self) -> io::Result<Option<Bytes>> {
@@ -81,13 +81,17 @@ impl Future for IpfsReqFuture {
           self.content = Some(bytes.clone());
           println!("Content: {:?}", String::from_utf8_lossy(&self.content.as_ref().unwrap()));
           // store future in self for future poll in the next iteration....
-          let ff = self.client.files_write(&self.path, true, true, bytes.reader())
-          let res = ff.poll(cx);
+          self.req_fut = Some(self.client.files_write(&self.path, true, true, bytes.reader()));
+          let res = self.req_fut.and_then(|ft| Some(ft.poll(cx)));
           println!("Res: {:?}", res);
-          match res {
-            Poll::Ready(Ok(data)) => Poll::Ready(Ok(data)),
-            Poll::Ready(Err(e)) => Poll::Ready(Err(other(e))),
-            Poll::Pending => Poll::Pending,
+          if let Some(result) = res {
+            match result {
+              Poll::Ready(Ok(data)) => Poll::Ready(Ok(data)),
+              Poll::Ready(Err(e)) => Poll::Ready(Err(other(e))),
+              Poll::Pending => Poll::Pending,
+            }
+          } else {
+            unreachable!("Request future is always created");
           }
         } else {
           Poll::Pending
