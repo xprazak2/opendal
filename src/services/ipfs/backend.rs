@@ -1,25 +1,20 @@
 use super::builder::Builder;
 use super::dir_stream::DirStream;
-use super::request_writer::{RequestWriter, IpfsReqFuture};
+use super::request_writer::{RequestWriter, IpfsWriterFuture};
 
 use crate::{Accessor, AccessorMetadata, BytesReader, BytesWriter, ObjectMetadata, ObjectMode, DirStreamer};
 use crate::ops::{OpCreate, OpRead, OpWrite, OpStat, OpDelete, OpList};
-use crate::io_util;
 
 use std::fmt;
 use std::sync::Arc;
 use async_trait::async_trait;
 use bytes::{Bytes, Buf};
 use futures::TryStreamExt;
-use ipfs_api::response::{FilesStatResponse, FilesLsResponse};
+use ipfs_api::response::FilesLsResponse;
 use ipfs_api::{IpfsClient, IpfsApi};
 use ipfs_api;
 use std::io;
 use futures::channel::mpsc::{self};
-use futures::channel::mpsc::Receiver;
-use std::pin::Pin;
-use crate::error::other;
-
 
 /// Backend for IPFS service
 #[derive(Clone)]
@@ -35,10 +30,12 @@ impl fmt::Debug for Backend {
 }
 
 impl Backend {
+    /// Constructor for ipfs builder
     pub fn new(root: String) -> Self {
       Self { root, client: IpfsClient::default() }
     }
 
+    /// Create a default builder for ipfs.
     pub fn build() -> Builder {
       Builder::default()
     }
@@ -118,9 +115,9 @@ impl Accessor for Backend {
 
     let (tx, rx) = mpsc::channel::<Bytes>(0);
 
-    let req_fut = IpfsReqFuture::new(rx, Arc::new(self.clone()), path);
+    let req_fut = IpfsWriterFuture::new(rx, Arc::new(self.clone()), path);
 
-    let req_writer = RequestWriter::new(args, tx, req_fut, "handle it".to_string());
+    let req_writer = RequestWriter::new(tx, req_fut);
 
     Ok(Box::new(req_writer))
   }

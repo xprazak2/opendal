@@ -1,7 +1,6 @@
 use futures::future::BoxFuture;
 use futures::ready;
 use futures::Future;
-use ipfs_api::response::FilesEntry;
 use ipfs_api::response::FilesLsResponse;
 use std::io;
 use std::sync::Arc;
@@ -25,10 +24,6 @@ enum State {
   Idle,
   Sending(BoxFuture<'static, io::Result<FilesLsResponse>>),
   Listing((FilesLsResponse, usize)),
-}
-
-struct Output {
-  contents: Vec<FilesLsResponse>
 }
 
 impl DirStream {

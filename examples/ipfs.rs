@@ -32,26 +32,21 @@ Available Environment Values:
 
   let op: Operator = Operator::new(accessor);
 
-  // let path = "/mfs/QmckbcLXxdgSHJVY2dHc2tN6Sz53zNe9C5YDbDdvSoNkVS/file.txt";
-
-  // let content = op.object(&path).read().await?;
-
-  // println!("File content: {}", String::from_utf8_lossy(&content));
-
-  // let dd = "/mfs/QmckbcLXxdgSHJVY2dHc2tN6Sz53zNe9C5YDbDdvSoNkVS/";
-
-  // let mut list = op.object(&dd).list().await?;
-
-  // while let Some(res) = list.next().await {
-  //   let item = res?;
-  //   println!("{}", item.path())
-  // }
-
-  let dd = "/mfs/QmckbcLXxdgSHJVY2dHc2tN6Sz53zNe9C5YDbDdvSoNkVS/ble";
-
-  info!("try to write file: {}", &dd);
-  op.object(&dd).write("Hello, world!").await?;
+  let path = "/file.txt";
+  info!("try to write file: {}", &path);
+  op.object(&path).write("Hello, world!").await?;
   info!("write file successful!");
+
+  let content = op.object(&path).read().await?;
+  info!("File content: {}", String::from_utf8_lossy(&content));
+
+  let root = "/";
+  let mut list = op.object(&root).list().await?;
+  info!("Listing entries in {}", &root);
+  while let Some(res) = list.next().await {
+    let item = res?;
+    info!("Found entry: {}", item.path())
+  }
 
   Ok(())
 }

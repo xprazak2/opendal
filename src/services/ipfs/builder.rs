@@ -51,14 +51,9 @@ impl Builder {
     }
   }
 
-
   pub async fn finish(&mut self) -> Result<Arc<dyn Accessor>> {
-    info!("backend build started: {:?}", &self);
-
-    info!("backend build finished: {:?}", &self);
-
     let root = self.root_string()?;
-
+    info!("backend build finished: {:?}", &self);
     Ok(Arc::new(Backend::new(root)))
   }
 }
