@@ -7,14 +7,18 @@ use crate::ops::{OpCreate, OpRead, OpWrite, OpStat, OpDelete, OpList};
 
 use std::fmt;
 use std::sync::Arc;
+use std::io;
 use async_trait::async_trait;
 use bytes::{Bytes, Buf};
 use futures::TryStreamExt;
+
 use ipfs_api::response::FilesLsResponse;
 use ipfs_api::{IpfsClient, IpfsApi};
 use ipfs_api;
-use std::io;
+
 use futures::channel::mpsc::{self};
+
+use minitrace::trace;
 
 /// Backend for IPFS service
 #[derive(Clone)]
