@@ -17,7 +17,7 @@ use ipfs_api::{IpfsClient, IpfsApi};
 use ipfs_api;
 
 use futures::channel::mpsc::{self};
-
+use metrics::increment_counter;
 use minitrace::trace;
 
 /// Backend for IPFS service
@@ -52,6 +52,7 @@ impl Backend {
       format!("{}{}", self.root, path.trim_start_matches(&self.root))
     }
 
+    #[trace("files_stat")]
     pub(crate) async fn files_stat(&self, path: &str) -> io::Result<ObjectMetadata> {
       let mut meta = ObjectMetadata::default();
 
@@ -100,12 +101,18 @@ impl Accessor for Backend {
     unimplemented!()
   }
 
+  #[trace("create")]
   async fn create(&self, args: &OpCreate) -> io::Result<()> {
+    increment_counter!("opendal_ipfs_create_requests");
+
     let path = self.get_abs_path(args.path());
     self.files_create(&path).await
   }
 
+  #[trace("read")]
   async fn read(&self, args: &OpRead) -> io::Result<BytesReader> {
+    increment_counter!("opendal_ipfs_read_requests");
+
     let path = self.get_abs_path(args.path());
 
     let offset = args.offset().map(|val| i64::try_from(val).ok()).flatten();
@@ -114,7 +121,10 @@ impl Accessor for Backend {
     Ok(reader)
   }
 
+  #[trace("write")]
   async fn write(&self, args: &OpWrite) -> io::Result<BytesWriter> {
+    increment_counter!("opendal_ipfs_write_requests");
+
     let path = self.get_abs_path(args.path()).clone();
 
     let (tx, rx) = mpsc::channel::<Bytes>(0);
@@ -126,17 +136,26 @@ impl Accessor for Backend {
     Ok(Box::new(req_writer))
   }
 
+  #[trace("stat")]
   async fn stat(&self, args: &OpStat) -> io::Result<ObjectMetadata> {
+    increment_counter!("opendal_ipfs_stat_requests");
+
     let path = self.get_abs_path(args.path());
     self.files_stat(&path).await
   }
 
+  #[trace("delete")]
   async fn delete(&self, args: &OpDelete) -> io::Result<()> {
+    increment_counter!("opendal_ipfs_delete_requests");
+
     let path = self.get_abs_path(args.path());
     self.files_delete(&path).await
   }
 
+  #[trace("list")]
   async fn list(&self, args: &OpList) -> io::Result<DirStreamer> {
+    increment_counter!("opendal_ipfs_list_requests");
+
     let path = self.get_abs_path(args.path());
     Ok(Box::new(DirStream::new(Arc::new(self.clone()), &path)))
   }

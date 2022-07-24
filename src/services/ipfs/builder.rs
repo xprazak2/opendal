@@ -57,3 +57,30 @@ impl Builder {
     Ok(Arc::new(Backend::new(root)))
   }
 }
+
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_root_string() {
+    let mut builder = Builder::default();
+    builder.root("/foo/bar");
+    assert_eq!(builder.root_string().unwrap(), "/foo/bar/".to_string());
+
+    builder.root("foo");
+    assert!(builder.root_string().is_err());
+  }
+
+  #[tokio::test]
+  async fn test_finish() {
+    let mut builder = Builder::default();
+    builder.root("foo");
+
+    assert!(builder.finish().await.is_err());
+
+    builder.root("/");
+    assert!(builder.finish().await.is_ok());
+  }
+}

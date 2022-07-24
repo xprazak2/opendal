@@ -6,3 +6,7 @@ mod backend;
 mod dir_stream;
 mod request_writer;
 pub use backend::Backend;
+
+#[doc(hidden)]
+#[cfg(feature = "testing")]
+pub mod tests;
